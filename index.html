@@ -145,12 +145,11 @@
         <div class="no-posts">読み込み中...</div>
     </div>
 
-    <!-- Firebaseの処理 -->
+    <!-- Realtime Database用の処理 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getDatabase, ref, push, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // あなたのFirebase設定
         const firebaseConfig = {
             apiKey: "AIzaSyCelHUSB6OX_4uhQrrJvheG6f9HQfUlgmI",
             authDomain: "friend-bbs-aed8d.firebaseapp.com",
@@ -162,39 +161,38 @@
             measurementId: "G-DCJ2C0VK6W"
         };
 
-        // Firebaseの初期化
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        const db = getDatabase(app);
 
         const form = document.getElementById('postForm');
         const nameInput = document.getElementById('name');
         const messageInput = document.getElementById('message');
         const container = document.getElementById('postsContainer');
 
-        // リアルタイムでデータを監視 (onSnapshot)
-        const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-        onSnapshot(q, (snapshot) => {
-            if (snapshot.empty) {
-                container.innerHTML = '<div class="no-posts">まだ投稿はありません。最初のメッセージを投稿してみよう！</div>';
-                return;
+        let hasPosts = false;
+
+        // データをリアルタイムで取得
+        const postsRef = ref(db, 'posts');
+        onChildAdded(postsRef, (snapshot) => {
+            if (!hasPosts) {
+                container.innerHTML = '';
+                hasPosts = true;
             }
 
-            container.innerHTML = '';
-            snapshot.forEach((doc) => {
-                const post = doc.data();
-                const dateStr = post.createdAt ? new Date(post.createdAt.toDate()).toLocaleString('ja-JP') : '送信中...';
+            const post = snapshot.val();
+            const dateStr = post.createdAt ? new Date(post.createdAt).toLocaleString('ja-JP') : '';
 
-                const postEl = document.createElement('div');
-                postEl.className = 'post-item';
-                postEl.innerHTML = `
-                    <div class="post-header">
-                        <span class="post-name">${escapeHTML(post.name)}</span>
-                        <span>${escapeHTML(dateStr)}</span>
-                    </div>
-                    <div class="post-content">${escapeHTML(post.message)}</div>
-                `;
-                container.appendChild(postEl);
-            });
+            const postEl = document.createElement('div');
+            postEl.className = 'post-item';
+            postEl.innerHTML = `
+                <div class="post-header">
+                    <span class="post-name">${escapeHTML(post.name)}</span>
+                    <span>${escapeHTML(dateStr)}</span>
+                </div>
+                <div class="post-content">${escapeHTML(post.message)}</div>
+            `;
+            // 新しい投稿を上に表示する
+            container.prepend(postEl);
         });
 
         // 投稿ボタンを押したとき
@@ -206,19 +204,18 @@
             if (!message) return;
 
             try {
-                await addDoc(collection(db, "posts"), {
+                await push(postsRef, {
                     name: name,
                     message: message,
-                    createdAt: serverTimestamp()
+                    createdAt: Date.now()
                 });
                 messageInput.value = '';
             } catch (error) {
-                console.error("エラーが発生しました: ", error);
+                console.error("エラー: ", error);
                 alert("投稿に失敗しました。");
             }
         });
 
-        // XSS対策のエスケープ処理
         function escapeHTML(str) {
             return str.replace(/[&<>'"]/g, 
                 tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
