@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リアルタイム掲示板</title>
+    <title>リアルタイム掲示板 - スレッド式</title>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -23,10 +23,10 @@
             line-height: 1.5;
         }
 
-        h1 {
+        h1, h2 {
             text-align: center;
             color: var(--primary-color);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .card {
@@ -35,11 +35,11 @@
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         label {
@@ -68,7 +68,7 @@
 
         textarea {
             resize: vertical;
-            height: 100px;
+            height: 80px;
         }
 
         button {
@@ -87,20 +87,47 @@
             background-color: #1d4ed8;
         }
 
-        .post-item {
+        .thread-item {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 16px;
-            margin-bottom: 12px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .thread-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border-color: var(--primary-color);
+        }
+
+        .thread-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 4px;
+        }
+
+        .thread-info {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .post-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
         }
 
         .post-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-size: 0.85rem;
             color: #64748b;
         }
@@ -108,7 +135,6 @@
         .post-name {
             font-weight: bold;
             color: var(--text-color);
-            font-size: 1rem;
         }
 
         .post-content {
@@ -116,7 +142,19 @@
             word-break: break-all;
         }
 
-        .no-posts {
+        .back-btn {
+            background-color: #64748b;
+            margin-bottom: 16px;
+        }
+        .back-btn:hover {
+            background-color: #475569;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .no-data {
             text-align: center;
             color: #64748b;
             padding: 20px;
@@ -127,28 +165,57 @@
 
     <h1>リアルタイム掲示板</h1>
 
-    <div class="card">
-        <form id="postForm">
-            <div class="form-group">
-                <label for="name">お名前</label>
-                <input type="text" id="name" placeholder="名なしさん" required>
-            </div>
-            <div class="form-group">
-                <label for="message">コメント</label>
-                <textarea id="message" placeholder="いま何してる？" required></textarea>
-            </div>
-            <button type="submit">投稿する</button>
-        </form>
+    <!-- スレッド一覧画面 -->
+    <div id="threadListView">
+        <div class="card">
+            <h2>新しいスレッドを立てる</h2>
+            <form id="createThreadForm">
+                <div class="form-group">
+                    <label for="threadTitle">スレッドタイトル</label>
+                    <input type="text" id="threadTitle" placeholder="例：雑談しようぜ、ゲームの攻略について" required>
+                </div>
+                <div class="form-group">
+                    <label for="creatorName">作成者</label>
+                    <input type="text" id="creatorName" placeholder="名なしさん" required>
+                </div>
+                <button type="submit">スレッドを作成</button>
+            </form>
+        </div>
+
+        <h2>スレッド一覧</h2>
+        <div id="threadListContainer">
+            <div class="no-data">読み込み中...</div>
+        </div>
     </div>
 
-    <div id="postsContainer">
-        <div class="no-posts">読み込み中...</div>
+    <!-- 個別スレッド画面 -->
+    <div id="threadDetailView" class="hidden">
+        <button class="back-btn" id="backToListBtn">← スレッド一覧に戻る</button>
+        <h2 id="currentoticTitle" style="text-align: left; word-break: break-all;">スレッド名</h2>
+
+        <div class="card">
+            <form id="postForm">
+                <div class="form-group">
+                    <label for="postName">お名前</label>
+                    <input type="text" id="postName" placeholder="名なしさん" required>
+                </div>
+                <div class="form-group">
+                    <label for="postMessage">コメント</label>
+                    <textarea id="postMessage" placeholder="メッセージを入力..." required></textarea>
+                </div>
+                <button type="submit">書き込む</button>
+            </form>
+        </div>
+
+        <div id="postsContainer">
+            <div class="no-data">読み込み中...</div>
+        </div>
     </div>
 
-    <!-- Realtime Database用の処理 -->
+    <!-- Realtime Databaseを使ったスレッド対応処理 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, push, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, push, onValue, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCelHUSB6OX_4uhQrrJvheG6f9HQfUlgmI",
@@ -164,58 +231,153 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        const form = document.getElementById('postForm');
-        const nameInput = document.getElementById('name');
-        const messageInput = document.getElementById('message');
-        const container = document.getElementById('postsContainer');
+        // 要素の取得
+        const threadListView = document.getElementById('threadListView');
+        const threadDetailView = document.getElementById('threadDetailView');
+        const threadListContainer = document.getElementById('threadListContainer');
+        const createThreadForm = document.getElementById('createThreadForm');
+        const threadTitleInput = document.getElementById('threadTitle');
+        const creatorNameInput = document.getElementById('creatorName');
+        
+        const backToListBtn = document.getElementById('backToListBtn');
+        const currentoticTitle = document.getElementById('currentoticTitle');
+        const postForm = document.getElementById('postForm');
+        const postNameInput = document.getElementById('postName');
+        const postMessageInput = document.getElementById('postMessage');
+        const postsContainer = document.getElementById('postsContainer');
 
-        let hasPosts = false;
+        let currentThreadId = null;
+        let postsUnsubscribe = null;
 
-        // データをリアルタイムで取得
-        const postsRef = ref(db, 'posts');
-        onChildAdded(postsRef, (snapshot) => {
-            if (!hasPosts) {
-                container.innerHTML = '';
-                hasPosts = true;
+        // 1. スレッド一覧の取得と表示
+        const threadsRef = ref(db, 'threads');
+        onValue(threadsRef, (snapshot) => {
+            threadListContainer.innerHTML = '';
+            if (!snapshot.exists()) {
+                threadListContainer.innerHTML = '<div class="no-data">まだスレッドがありません。最初のスレッドを作ってみよう！</div>';
+                return;
             }
 
-            const post = snapshot.val();
-            const dateStr = post.createdAt ? new Date(post.createdAt).toLocaleString('ja-JP') : '';
+            const threads = snapshot.val();
+            // 新しい順に並び替え
+            const keys = Object.keys(threads).reverse();
 
-            const postEl = document.createElement('div');
-            postEl.className = 'post-item';
-            postEl.innerHTML = `
-                <div class="post-header">
-                    <span class="post-name">${escapeHTML(post.name)}</span>
-                    <span>${escapeHTML(dateStr)}</span>
-                </div>
-                <div class="post-content">${escapeHTML(post.message)}</div>
-            `;
-            // 新しい投稿を上に表示する
-            container.prepend(postEl);
+            keys.forEach((key) => {
+                const thread = threads[key];
+                const dateStr = thread.createdAt ? new Date(thread.createdAt).toLocaleString('ja-JP') : '';
+
+                const item = document.createElement('div');
+                item.className = 'thread-item';
+                item.innerHTML = `
+                    <div class="thread-title">${escapeHTML(thread.title)}</div>
+                    <div class="thread-info">作成者: ${escapeHTML(thread.creator)} / ${escapeHTML(dateStr)}</div>
+                `;
+                item.addEventListener('click', () => {
+                    openThread(key, thread.title);
+                });
+                threadListContainer.appendChild(item);
+            });
         });
 
-        // 投稿ボタンを押したとき
-        form.addEventListener('submit', async (e) => {
+        // 2. 新規スレッド作成
+        createThreadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = nameInput.value.trim() || '名なしさん';
-            const message = messageInput.value.trim();
+            const title = threadTitleInput.value.trim();
+            const creator = creatorNameInput.value.trim() || '名なしさん';
+
+            if (!title) return;
+
+            try {
+                const newThreadRef = await push(threadsRef, {
+                    title: title,
+                    creator: creator,
+                    createdAt: Date.now()
+                });
+                threadTitleInput.value = '';
+                // 作成したスレッドにそのまま移動
+                openThread(newThreadRef.key, title);
+            } catch (error) {
+                console.error("エラー: ", error);
+                alert("スレッドの作成に失敗しました。");
+            }
+        });
+
+        // 3. スレッドを開く処理
+        function openThread(threadId, title) {
+            currentThreadId = threadId;
+            currentoticTitle.textContent = title;
+            threadListView.classList.add('hidden');
+            threadDetailView.classList.remove('hidden');
+            postsContainer.innerHTML = '<div class="no-data">読み込み中...</div>';
+
+            // 以前のリスナーがあれば解除
+            if (postsUnsubscribe) {
+                // onChildAddedの場合は直接外せないため、親のonValueに切り替えるか、画面切り替えで対応
+            }
+
+            // 該当スレッドのメッセージを取得
+            const messagesRef = ref(db, `messages/${threadId}`);
+            let hasMessages = false;
+
+            // 一度中身をクリアして監視
+            onValue(messagesRef, (snapshot) => {
+                postsContainer.innerHTML = '';
+                if (!snapshot.exists()) {
+                    postsContainer.innerHTML = '<div class="no-data">まだ投稿はありません。最初のメッセージを投稿しよう！</div>';
+                    return;
+                }
+
+                const messages = snapshot.val();
+                Object.keys(messages).forEach((msgKey) => {
+                    const msg = messages[msgKey];
+                    const dateStr = msg.createdAt ? new Date(msg.createdAt).toLocaleString('ja-JP') : '';
+
+                    const postEl = document.createElement('div');
+                    postEl.className = 'post-item';
+                    postEl.innerHTML = `
+                        <div class="post-header">
+                            <span class="post-name">${escapeHTML(msg.name)}</span>
+                            <span>${escapeHTML(dateStr)}</span>
+                        </div>
+                        <div class="post-content">${escapeHTML(msg.message)}</div>
+                    `;
+                    postsContainer.appendChild(postEl);
+                });
+            }, { onlyOnce: false });
+        }
+
+        // 4. 一覧に戻るボタン
+        backToListBtn.addEventListener('click', () => {
+            currentThreadId = null;
+            threadDetailView.classList.add('hidden');
+            threadListView.classList.remove('hidden');
+        });
+
+        // 5. メッセージ投稿
+        postForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentThreadId) return;
+
+            const name = postNameInput.value.trim() || '名なしさん';
+            const message = postMessageInput.value.trim();
 
             if (!message) return;
 
             try {
-                await push(postsRef, {
+                const messagesRef = ref(db, `messages/${currentThreadId}`);
+                await push(messagesRef, {
                     name: name,
                     message: message,
                     createdAt: Date.now()
                 });
-                messageInput.value = '';
+                postMessageInput.value = '';
             } catch (error) {
                 console.error("エラー: ", error);
-                alert("投稿に失敗しました。");
+                alert("送信に失敗しました。");
             }
         });
 
+        // XSS対策
         function escapeHTML(str) {
             return str.replace(/[&<>'"]/g, 
                 tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
