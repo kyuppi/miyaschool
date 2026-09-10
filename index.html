@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リアルタイム掲示板 - アカウント・管理機能付き</title>
+    <title>リアルタイム掲示板 - 検索・ソート対応版</title>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -12,6 +12,7 @@
             --text-color: #1e293b;
             --border-color: #e2e8f0;
             --danger-color: #ef4444;
+            --star-color: #f59e0b;
         }
 
         body {
@@ -52,7 +53,8 @@
 
         input[type="text"],
         input[type="password"],
-        textarea {
+        textarea,
+        select {
             width: 100%;
             padding: 10px;
             border: 1px solid var(--border-color);
@@ -61,11 +63,13 @@
             box-sizing: border-box;
             outline: none;
             transition: border-color 0.2s;
+            background-color: white;
         }
 
         input[type="text"]:focus,
         input[type="password"]:focus,
-        textarea:focus {
+        textarea:focus,
+        select:focus {
             border-color: var(--primary-color);
         }
 
@@ -97,6 +101,17 @@
             background-color: #dc2626;
         }
 
+        .star-btn {
+            background-color: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid var(--border-color);
+        }
+        .star-btn.active {
+            background-color: #fef3c7;
+            color: #d97706;
+            border-color: #f59e0b;
+        }
+
         .user-bar {
             display: flex;
             justify-content: space-between;
@@ -108,15 +123,34 @@
             font-size: 0.9rem;
         }
 
+        /* 検索とソートのコントロールバー */
+        .controls-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            align-items: center;
+        }
+        .controls-bar input {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        .controls-bar select {
+            width: auto;
+            min-width: 140px;
+        }
+
         .thread-item {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 10px;
+        }
+
+        .thread-top {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
         }
 
         .thread-main {
@@ -134,6 +168,21 @@
         .thread-info {
             font-size: 0.8rem;
             color: #64748b;
+        }
+
+        .thread-stats {
+            font-size: 0.8rem;
+            color: #475569;
+            margin-top: 6px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .thread-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 8px;
         }
 
         .post-item {
@@ -191,7 +240,7 @@
 
     <h1>リアルタイム掲示板</h1>
 
-    <!-- 認証画面 (未ログイン時) -->
+    <!-- 認証画面 -->
     <div id="authView" class="auth-container">
         <div class="card">
             <h2>ログイン / 新規登録</h2>
@@ -199,7 +248,7 @@
             <form id="authForm">
                 <div class="form-group">
                     <label for="authName">ユーザー名</label>
-                    <input type="text" id="authName" placeholder="半角・全角ネーム" required>
+                    <input type="text" id="authName" placeholder="ユーザー名" required>
                 </div>
                 <div class="form-group">
                     <label for="authPass">パスワード</label>
@@ -213,7 +262,7 @@
         </div>
     </div>
 
-    <!-- メインアプリ画面 (ログイン後) -->
+    <!-- メインアプリ画面 -->
     <div id="appView" class="hidden">
         <div class="user-bar">
             <span>ログイン中: <strong id="currentUserName"></strong></span>
@@ -223,10 +272,16 @@
             </div>
         </div>
 
-        <!-- 管理者パネル表示 (管理者時のみ) -->
+        <!-- 管理者パネル (ユーザーBAN管理用) -->
         <div id="adminPanel" class="card hidden" style="border-color: #d97706; background-color: #fffbeb;">
-            <h3 style="color: #d97706; margin-top: 0;">⚠️ 管理者モード稼働中</h3>
-            <p style="font-size: 0.85rem;">すべてのスレッドの削除権限が有効になっています。</p>
+            <h3 style="color: #d97706; margin-top: 0;">⚠️ 管理者モード（アカウント管理）</h3>
+            <div class="form-group">
+                <label for="banUserName">BANするユーザー名</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="banUserName" placeholder="ユーザー名を入力">
+                    <button id="executeBanBtn" class="danger-btn" style="padding: 8px 16px;">BAN実行</button>
+                </div>
+            </div>
         </div>
 
         <!-- スレッド一覧画面 -->
@@ -243,6 +298,17 @@
             </div>
 
             <h2>スレッド一覧</h2>
+            
+            <!-- ★ 検索とソートのコントロール ★ -->
+            <div class="controls-bar">
+                <input type="text" id="searchInput" placeholder="🔍 タイトルで検索...">
+                <select id="sortSelect">
+                    <option value="newest">🕒 新着順</option>
+                    <option value="views">👁️ 視聴回数順</option>
+                    <option value="favorites">⭐ お気に入り順</option>
+                </select>
+            </div>
+
             <div id="threadListContainer">
                 <div class="no-data">読み込み中...</div>
             </div>
@@ -269,10 +335,10 @@
         </div>
     </div>
 
-    <!-- Realtime Databaseを使ったスクリプト -->
+    <!-- Realtime Databaseスクリプト -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, get, push, remove, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, get, push, remove, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCelHUSB6OX_4uhQrrJvheG6f9HQfUlgmI",
@@ -288,7 +354,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // DOM要素
+        // 要素取得
         const authView = document.getElementById('authView');
         const appView = document.getElementById('appView');
         const authForm = document.getElementById('authForm');
@@ -300,6 +366,8 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const adminModeBtn = document.getElementById('adminModeBtn');
         const adminPanel = document.getElementById('adminPanel');
+        const banUserNameInput = document.getElementById('banUserName');
+        const executeBanBtn = document.getElementById('executeBanBtn');
 
         const threadListView = document.getElementById('threadListView');
         const threadDetailView = document.getElementById('threadDetailView');
@@ -312,11 +380,15 @@
         const postMessageInput = document.getElementById('postMessage');
         const postsContainer = document.getElementById('postsContainer');
 
+        const searchInput = document.getElementById('searchInput');
+        const sortSelect = document.getElementById('sortSelect');
+
         let currentUser = null;
         let isAdmin = false;
         let currentThreadId = null;
+        let allThreadsData = {}; // 検索・ソート用に全スレッドデータを保持
 
-        // 1. 新規登録処理（重複チェック付き）
+        // 1. 新規登録
         registerBtn.addEventListener('click', async () => {
             const name = authNameInput.value.trim();
             const pass = authPassInput.value.trim();
@@ -335,12 +407,12 @@
                 return;
             }
 
-            await set(userRef, { password: pass });
+            await set(userRef, { password: pass, isBanned: false });
             currentUser = name;
             loginSuccess();
         });
 
-        // 2. ログイン処理
+        // 2. ログイン
         authForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = authNameInput.value.trim();
@@ -351,11 +423,15 @@
             const snapshot = await get(userRef);
 
             if (!snapshot.exists()) {
-                authError.textContent = 'ユーザーが存在しません。新規登録してください。';
+                authError.textContent = 'ユーザーが存在しません。';
                 return;
             }
 
             const userData = snapshot.val();
+            if (userData.isBanned) {
+                authError.textContent = 'このアカウントはBAN（利用停止）されています。';
+                return;
+            }
             if (userData.password !== pass) {
                 authError.textContent = 'パスワードが間違っています。';
                 return;
@@ -372,7 +448,6 @@
             loadThreads();
         }
 
-        // ログアウト
         logoutBtn.addEventListener('click', () => {
             currentUser = null;
             isAdmin = false;
@@ -383,14 +458,14 @@
             authPassInput.value = '';
         });
 
-        // 管理者モード切り替え
+        // 管理者ログイン
         adminModeBtn.addEventListener('click', () => {
             if (isAdmin) {
                 isAdmin = false;
                 adminPanel.classList.add('hidden');
                 adminModeBtn.textContent = '管理者ログイン';
                 alert('管理者モードを終了しました。');
-                loadThreads();
+                renderThreads();
                 return;
             }
 
@@ -400,63 +475,156 @@
                 adminPanel.classList.remove('hidden');
                 adminModeBtn.textContent = '管理者モード解除';
                 alert('管理者としてログインしました。');
-                loadThreads();
+                renderThreads();
             } else if (inputPass !== null) {
                 alert('パスワードが違います。');
             }
         });
 
-        // 3. スレッド一覧の取得と表示
+        // 管理者のユーザーBAN実行
+        executeBanBtn.addEventListener('click', async () => {
+            const targetUser = banUserNameInput.value.trim();
+            if (!targetUser) return;
+
+            const userRef = ref(db, `users/${targetUser}`);
+            const snapshot = await get(userRef);
+            if (!snapshot.exists()) {
+                alert('指定したユーザーは存在しません。');
+                return;
+            }
+
+            if (confirm(`ユーザー「${targetUser}」をBANしますか？`)) {
+                await update(userRef, { isBanned: true });
+                alert(`ユーザー「${targetUser}」をBANしました。`);
+                banUserNameInput.value = '';
+            }
+        });
+
+        // 検索とソートのイベントリスナー
+        searchInput.addEventListener('input', renderThreads);
+        sortSelect.addEventListener('change', renderThreads);
+
+        // 3. スレッド一覧の監視
         function loadThreads() {
             const threadsRef = ref(db, 'threads');
             onValue(threadsRef, (snapshot) => {
-                threadListContainer.innerHTML = '';
                 if (!snapshot.exists()) {
-                    threadListContainer.innerHTML = '<div class="no-data">まだスレッドがありません。</div>';
-                    return;
+                    allThreadsData = {};
+                } else {
+                    allThreadsData = snapshot.val();
+                }
+                renderThreads(); // 取得したら画面に描画
+            }, { onlyOnce: false });
+        }
+
+        // 検索・ソートをして画面に表示する関数
+        function renderThreads() {
+            threadListContainer.innerHTML = '';
+            
+            if (Object.keys(allThreadsData).length === 0) {
+                threadListContainer.innerHTML = '<div class="no-data">まだスレッドがありません。</div>';
+                return;
+            }
+
+            const searchQuery = searchInput.value.trim().toLowerCase();
+            const sortMode = sortSelect.value;
+
+            // オブジェクトを配列に変換して処理しやすくする
+            let threadsArray = Object.keys(allThreadsData).map(key => {
+                return { key: key, ...allThreadsData[key] };
+            });
+
+            // 🔍 検索（絞り込み）
+            if (searchQuery) {
+                threadsArray = threadsArray.filter(t => t.title.toLowerCase().includes(searchQuery));
+            }
+
+            // 🔃 ソート（並び替え）
+            threadsArray.sort((a, b) => {
+                if (sortMode === 'newest') {
+                    // 新着順 (createdAt が大きい順)
+                    return (b.createdAt || 0) - (a.createdAt || 0);
+                } else if (sortMode === 'views') {
+                    // 視聴回数順
+                    return (b.views || 0) - (a.views || 0);
+                } else if (sortMode === 'favorites') {
+                    // お気に入り順
+                    const aFavs = a.favorites ? Object.keys(a.favorites).length : 0;
+                    const bFavs = b.favorites ? Object.keys(b.favorites).length : 0;
+                    return bFavs - aFavs;
+                }
+            });
+
+            if (threadsArray.length === 0) {
+                threadListContainer.innerHTML = '<div class="no-data">該当するスレッドが見つかりません。</div>';
+                return;
+            }
+
+            // 画面に要素を追加
+            threadsArray.forEach((thread) => {
+                const key = thread.key;
+                const dateStr = thread.createdAt ? new Date(thread.createdAt).toLocaleString('ja-JP') : '';
+                const views = thread.views || 0;
+                
+                const favorites = thread.favorites || {};
+                const favCount = Object.keys(favorites).length;
+                const isFavoredByMe = favorites[currentUser] === true;
+
+                const item = document.createElement('div');
+                item.className = 'thread-item';
+
+                item.innerHTML = `
+                    <div class="thread-top">
+                        <div class="thread-main" id="thread-click-${key}">
+                            <div class="thread-title">${escapeHTML(thread.title)}</div>
+                            <div class="thread-info">作成者: ${escapeHTML(thread.creator)} / ${escapeHTML(dateStr)}</div>
+                            <div class="thread-stats">
+                                <span>👁️ 閲覧数: ${views}</span>
+                                <span>⭐ お気に入り: ${favCount}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="thread-actions">
+                        <button class="star-btn ${isFavoredByMe ? 'active' : ''}" id="fav-btn-${key}" style="padding: 6px 12px; font-size: 0.85rem; border-radius: 6px;">
+                            ${isFavoredByMe ? '★ お気に入り解除' : '☆ お気に入り'}
+                        </button>
+                    </div>
+                `;
+
+                // スレッドを開く
+                item.querySelector(`#thread-click-${key}`).addEventListener('click', () => {
+                    openThread(key, thread.title, views);
+                });
+
+                // お気に入りボタン
+                item.querySelector(`#fav-btn-${key}`).addEventListener('click', async () => {
+                    const favRef = ref(db, `threads/${key}/favorites/${currentUser}`);
+                    if (isFavoredByMe) {
+                        await remove(favRef);
+                    } else {
+                        await set(favRef, true);
+                    }
+                });
+
+                // 削除ボタン
+                if (isAdmin || thread.creator === currentUser) {
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'danger-btn';
+                    delBtn.textContent = '削除';
+                    delBtn.style.padding = '6px 12px';
+                    delBtn.style.fontSize = '0.85rem';
+                    delBtn.style.borderRadius = '6px';
+                    delBtn.addEventListener('click', async () => {
+                        if (confirm(`スレッド「${thread.title}」を削除しますか？`)) {
+                            await remove(ref(db, `threads/${key}`));
+                            await remove(ref(db, `messages/${key}`));
+                        }
+                    });
+                    item.querySelector('.thread-actions').appendChild(delBtn);
                 }
 
-                const threads = snapshot.val();
-                const keys = Object.keys(threads).reverse();
-
-                keys.forEach((key) => {
-                    const thread = threads[key];
-                    const dateStr = thread.createdAt ? new Date(thread.createdAt).toLocaleString('ja-JP') : '';
-
-                    const item = document.createElement('div');
-                    item.className = 'thread-item';
-
-                    const mainDiv = document.createElement('div');
-                    mainDiv.className = 'thread-main';
-                    mainDiv.innerHTML = `
-                        <div class="thread-title">${escapeHTML(thread.title)}</div>
-                        <div class="thread-info">作成者: ${escapeHTML(thread.creator)} / ${escapeHTML(dateStr)}</div>
-                    `;
-                    mainDiv.addEventListener('click', () => {
-                        openThread(key, thread.title);
-                    });
-                    item.appendChild(mainDiv);
-
-                    // 削除ボタン（自分が立てたスレッド、または管理者のみ表示）
-                    if (isAdmin || thread.creator === currentUser) {
-                        const delBtn = document.createElement('button');
-                        delBtn.className = 'danger-btn';
-                        delBtn.textContent = '削除';
-                        delBtn.style.padding = '6px 12px';
-                        delBtn.style.fontSize = '0.85rem';
-                        delBtn.addEventListener('click', async (e) => {
-                            e.stopPropagation();
-                            if (confirm(`スレッド「${thread.title}」を削除しますか？`)) {
-                                await remove(ref(db, `threads/${key}`));
-                                await remove(ref(db, `messages/${key}`));
-                            }
-                        });
-                        item.appendChild(delBtn);
-                    }
-
-                    threadListContainer.appendChild(item);
-                });
-            }, { onlyOnce: false });
+                threadListContainer.appendChild(item);
+            });
         }
 
         // 4. 新規スレッド作成
@@ -470,10 +638,11 @@
                 const newThreadRef = await push(threadsRef, {
                     title: title,
                     creator: currentUser,
-                    createdAt: Date.now()
+                    createdAt: Date.now(),
+                    views: 0
                 });
                 threadTitleInput.value = '';
-                openThread(newThreadRef.key, title);
+                openThread(newThreadRef.key, title, 0);
             } catch (error) {
                 console.error(error);
                 alert('作成に失敗しました。');
@@ -481,11 +650,16 @@
         });
 
         // 5. スレッドを開く
-        function openThread(threadId, title) {
+        async function openThread(threadId, title, currentViews) {
             currentThreadId = threadId;
             currentTargetTitle.textContent = title;
             threadListView.classList.add('hidden');
             threadDetailView.classList.remove('hidden');
+
+            // 閲覧数を+1更新
+            await update(ref(db, `threads/${threadId}`), {
+                views: (currentViews || 0) + 1
+            });
 
             const messagesRef = ref(db, `messages/${threadId}`);
             onValue(messagesRef, (snapshot) => {
@@ -518,7 +692,6 @@
             currentThreadId = null;
             threadDetailView.classList.add('hidden');
             threadListView.classList.remove('hidden');
-            loadThreads();
         });
 
         // 6. メッセージ投稿
